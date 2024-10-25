@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Main template for Scooter App'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: 'dev'
+    Description: 'Environment name (e.g., dev, staging, prod)'
+
+Resources:
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./network.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./database.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !GetAtt NetworkStack.Outputs.VpcId
+        PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
+        PrivateSubnet2: !GetAtt NetworkStack.Outputs.PrivateSubnet2
+
+  CacheStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./cache.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !GetAtt NetworkStack.Outputs.VpcId
+        PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
+        PrivateSubnet2: !GetAtt NetworkStack.Outputs.PrivateSubnet2
+
+  LambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./lambda.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !GetAtt NetworkStack.Outputs.VpcId
+        PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
+        PrivateSubnet2: !GetAtt NetworkStack.Outputs.PrivateSubnet2
+        DocumentDBEndpoint: !GetAtt DatabaseStack.Outputs.DocumentDBEndpoint
+        RedisEndpoint: !GetAtt CacheStack.Outputs.RedisEndpoint
+
+  ApiStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./api.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        SearchScootersFunction: !GetAtt LambdaStack.Outputs.SearchScootersFunction
+        StartTripFunction: !GetAtt LambdaStack.Outputs.StartTripFunction
+        EndTripFunction: !GetAtt LambdaStack.Outputs.EndTripFunction
+        UpdateUserProfileFunction: !GetAtt LambdaStack.Outputs.UpdateUserProfileFunction
+        GetUserProfileFunction: !GetAtt LambdaStack.Outputs.GetUserProfileFunction
+
+Outputs:
+  ApiUrl:
+    Description: 'API Gateway URL'
+    Value: !GetAtt ApiStack.Outputs.ApiUrl
+EOF
