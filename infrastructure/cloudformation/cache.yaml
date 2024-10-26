@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cache Stack for Scooter App - Redis for User Profiles, Scooter Search, Trip Info, and Fleet Data'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: 'Environment name (e.g., dev, staging, prod)'
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: 'VPC ID'
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: 'Private Subnet 1 ID'
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: 'Private Subnet 2 ID'
+
+Resources:
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Subnet group for Redis cache
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Redis cache
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  RedisCluster:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupId: !Sub '${EnvironmentName}-redis-cluster'
+      ReplicationGroupDescription: Redis cluster for scooter app
+      Engine: redis
+      EngineVersion: '6.x'
+      CacheNodeType: cache.t3.medium
+      NumNodeGroups: 1
+      ReplicasPerNodeGroup: 1
+      AutomaticFailoverEnabled: true
+      MultiAZEnabled: true
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda functions
+      VpcId: !Ref VpcId
+
+Outputs:
+  RedisEndpoint:
+    Description: 'Redis Cluster Configuration Endpoint'
+    Value: !GetAtt RedisCluster.ConfigurationEndPoint.Address
+    Export:
+      Name: !Sub '${EnvironmentName}-RedisEndpoint'
+
+  RedisPort:
+    Description: 'Redis Port'
+    Value: !GetAtt RedisCluster.ConfigurationEndPoint.Port
+    Export:
+      Name: !Sub '${EnvironmentName}-RedisPort'
+
+  LambdaSecurityGroupId:
+    Description: 'Security Group ID for Lambda functions'
+    Value: !Ref LambdaSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-LambdaSecurityGroupId'

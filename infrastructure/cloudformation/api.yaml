@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'API Gateway Stack for Scooter App with Cognito Integration'
+Description: 'API Gateway Stack for Scooter App with Cognito Integration for Web and Mobile'
 
 Parameters:
   EnvironmentName:
@@ -30,6 +30,7 @@ Resources:
         - email
       UsernameAttributes:
         - email
+      MfaConfiguration: 'OFF'
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -37,17 +38,42 @@ Resources:
           RequireNumbers: true
           RequireSymbols: true
           RequireUppercase: true
+      Schema:
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
 
-  CognitoUserPoolClient:
+  CognitoUserPoolClientWeb:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: !Sub '${EnvironmentName}-ScooterAppClient'
+      ClientName: !Sub '${EnvironmentName}-ScooterAppWebClient'
       UserPoolId: !Ref CognitoUserPool
       GenerateSecret: false
       ExplicitAuthFlows:
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
       PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders:
+        - COGNITO
+
+  CognitoUserPoolClientMobile:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub '${EnvironmentName}-ScooterAppMobileClient'
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: true
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_CUSTOM_AUTH
+      PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders:
+        - COGNITO
 
   CognitoUserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
@@ -196,11 +222,17 @@ Outputs:
     Export:
       Name: !Sub '${EnvironmentName}-UserPoolId'
 
-  UserPoolClientId:
-    Description: 'Cognito User Pool Client ID'
-    Value: !Ref CognitoUserPoolClient
+  UserPoolWebClientId:
+    Description: 'Cognito User Pool Web Client ID'
+    Value: !Ref CognitoUserPoolClientWeb
     Export:
-      Name: !Sub '${EnvironmentName}-UserPoolClientId'
+      Name: !Sub '${EnvironmentName}-UserPoolWebClientId'
+
+  UserPoolMobileClientId:
+    Description: 'Cognito User Pool Mobile Client ID'
+    Value: !Ref CognitoUserPoolClientMobile
+    Export:
+      Name: !Sub '${EnvironmentName}-UserPoolMobileClientId'
 
   CognitoDomain:
     Description: 'Cognito Domain'

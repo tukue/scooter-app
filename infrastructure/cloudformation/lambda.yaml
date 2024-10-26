@@ -1,0 +1,324 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lambda Stack for Scooter App'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: 'Environment name (e.g., dev, staging, prod)'
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: 'VPC ID'
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: 'Private Subnet 1 ID'
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: 'Private Subnet 2 ID'
+  DocumentDBEndpoint:
+    Type: String
+    Description: 'DocumentDB Endpoint'
+  RedisEndpoint:
+    Type: String
+    Description: 'Redis Endpoint'
+  FleetTableName:
+    Type: String
+    Description: 'DynamoDB Fleet Table Name'
+  TripTableName:
+    Type: String
+    Description: 'DynamoDB Trip Table Name'
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+  Properties:
+    AssumeRolePolicyDocument:
+      Version: '2012-10-17'
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+    ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+    Policies:
+      - PolicyName: DocumentDBAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - rds-db:connect
+              Resource: !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DocumentDBCluster}/*'
+      - PolicyName: ElastiCacheAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - elasticache:*
+              Resource: '*'
+      - PolicyName: DynamoDBAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:DescribeStream
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:ListStreams
+              Resource: 
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/Fleet'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/Trip'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/User'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/Fleet/stream/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/Trip/stream/*'
+      - PolicyName: CloudWatchLogsAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: 'arn:aws:logs:*:*:*'
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda functions
+      VpcId: !Ref VpcId
+
+  # ... [Previous Lambda functions remain unchanged] ...
+
+  UpdateLeaderboardFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-UpdateLeaderboard'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk');
+          const redis = require('redis');
+          const { promisify } = require('util');
+
+          exports.handler = async (event) => {
+            const dynamodb = new AWS.DynamoDB.DocumentClient();
+            const redisClient = redis.createClient({
+              host: process.env.REDIS_ENDPOINT,
+              port: 6379
+            });
+
+            const setAsync = promisify(redisClient.set).bind(redisClient);
+
+            try {
+              // Query DynamoDB for trip data
+              const params = {
+                TableName: process.env.TRIP_TABLE,
+                IndexName: 'UserTrips', // Assuming you have a GSI named UserTrips
+                KeyConditionExpression: 'UserId = :userId',
+                ExpressionAttributeValues: {
+                  ':userId': 'ALL' // Special value to get all trips, adjust as needed
+                }
+              };
+
+              const result = await dynamodb.query(params).promise();
+
+              // Process trip data and calculate leaderboard
+              const leaderboard = calculateLeaderboard(result.Items);
+
+              // Store leaderboard in Redis
+              await setAsync('leaderboard', JSON.stringify(leaderboard));
+
+              console.log('Leaderboard updated successfully');
+              return { statusCode: 200, body: JSON.stringify({ message: 'Leaderboard updated' }) };
+            } catch (error) {
+              console.error('Error updating leaderboard:', error);
+              return { statusCode: 500, body: JSON.stringify({ message: 'Error updating leaderboard' }) };
+            } finally {
+              redisClient.quit();
+            }
+          };
+
+          function calculateLeaderboard(trips) {
+            // Implement your leaderboard calculation logic here
+            // This is a placeholder implementation
+            const userScores = {};
+            trips.forEach(trip => {
+              if (!userScores[trip.UserId]) {
+                userScores[trip.UserId] = 0;
+              }
+              userScores[trip.UserId] += trip.Distance || 0;
+            });
+
+            return Object.entries(userScores)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 10) // Top 10 users
+              .map(([userId, score]) => ({ userId, score }));
+          }
+      Runtime: nodejs14.x
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Environment:
+        Variables:
+          REDIS_ENDPOINT: !Ref RedisEndpoint
+          TRIP_TABLE: !Ref TripTableName
+      Timeout: 60 # Increase timeout to 60 seconds
+
+  GetLeaderboardFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-GetLeaderboard'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          const redis = require('redis');
+          const { promisify } = require('util');
+
+          exports.handler = async (event) => {
+            const redisClient = redis.createClient({
+              host: process.env.REDIS_ENDPOINT,
+              port: 6379
+            });
+
+            const getAsync = promisify(redisClient.get).bind(redisClient);
+
+            try {
+              // Retrieve leaderboard from Redis
+              const leaderboardData = await getAsync('leaderboard');
+
+              if (!leaderboardData) {
+                return {
+                  statusCode: 404,
+                  body: JSON.stringify({ message: 'Leaderboard not found' })
+                };
+              }
+
+              const leaderboard = JSON.parse(leaderboardData);
+
+              return {
+                statusCode: 200,
+                body: JSON.stringify(leaderboard)
+              };
+            } catch (error) {
+              console.error('Error retrieving leaderboard:', error);
+              return {
+                statusCode: 500,
+                body: JSON.stringify({ message: 'Error retrieving leaderboard' })
+              };
+            } finally {
+              redisClient.quit();
+            }
+          };
+      Runtime: nodejs14.x
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Environment:
+        Variables:
+          REDIS_ENDPOINT: !Ref RedisEndpoint
+      Timeout: 10 # 10 seconds should be enough for cache retrieval
+
+  UpdateLeaderboardScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Schedule for updating leaderboard"
+      ScheduleExpression: "rate(1 hour)"
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt UpdateLeaderboardFunction.Arn
+          Id: "UpdateLeaderboardSchedule"
+
+  PermissionForEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref UpdateLeaderboardFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt UpdateLeaderboardScheduleRule.Arn  
+
+
+  TripOperationsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-TripOperations'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Sub '${EnvironmentName}/trip-operations.zip'
+      Runtime: nodejs14.x
+      Environment:
+        Variables:
+          FLEET_TABLE: !Ref FleetTableName
+          TRIP_TABLE: !Ref TripTableName
+      Timeout: 10
+
+  TripOperationsFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref TripOperationsFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/trip-operations'
+
+  UserProfilesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-UserProfiles'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Sub '${EnvironmentName}/user-profiles.zip'
+      Runtime: nodejs14.x
+      Environment:
+        Variables:
+          MONGODB_URI: !Ref DocumentDBConnectionString
+          MONGODB_DB_NAME: !Ref DocumentDBDatabaseName
+          REDIS_ENDPOINT: !Ref RedisEndpoint
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Timeout: 10
+
+  UserProfilesFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UserProfilesFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/*/*'
+
+
+Outputs:
+  # ... [Previous outputs remain unchanged] ...
+
+  UpdateLeaderboardFunctionArn:
+    Description: 'UpdateLeaderboard Lambda Function ARN'
+    Value: !GetAtt UpdateLeaderboardFunction.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-UpdateLeaderboardFunctionArn'
+
+  GetLeaderboardFunctionArn:
+    Description: 'GetLeaderboard Lambda Function ARN'
+    Value: !GetAtt GetLeaderboardFunction.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-GetLeaderboardFunctionArn'
+ 

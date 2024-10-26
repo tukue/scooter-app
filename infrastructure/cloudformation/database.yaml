@@ -1,0 +1,176 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Database Stack for Scooter App - DynamoDB for Fleet and Trip Data, DocumentDB for User Profiles'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: 'Environment name (e.g., dev, staging, prod)'
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: 'VPC ID'
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: 'Private Subnet 1 ID'
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: 'Private Subnet 2 ID'
+
+Resources:
+  # DynamoDB for Fleet Data
+  FleetTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${EnvironmentName}-Fleet'
+      AttributeDefinitions:
+        - AttributeName: ScooterId
+          AttributeType: S
+        - AttributeName: Status
+          AttributeType: S
+        - AttributeName: Location
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ScooterId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusLocation
+          KeySchema:
+            - AttributeName: Status
+              KeyType: HASH
+            - AttributeName: Location
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # DynamoDB for Trip Data
+  TripTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${EnvironmentName}-Trips'
+      AttributeDefinitions:
+        - AttributeName: TripId
+          AttributeType: S
+        - AttributeName: UserId
+          AttributeType: S
+        - AttributeName: StartTime
+          AttributeType: S
+        - AttributeName: ScooterId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: TripId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserTrips
+          KeySchema:
+            - AttributeName: UserId
+              KeyType: HASH
+            - AttributeName: StartTime
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ScooterTrips
+          KeySchema:
+            - AttributeName: ScooterId
+              KeyType: HASH
+            - AttributeName: StartTime
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # DocumentDB for User Profiles
+  DocumentDBCluster:
+    Type: AWS::DocDB::DBCluster
+    Properties:
+      MasterUsername: !Sub '{{resolve:secretsmanager:${EnvironmentName}-DocumentDB-Secret:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${EnvironmentName}-DocumentDB-Secret:SecretString:password}}'
+      DBClusterIdentifier: !Sub '${EnvironmentName}-docdb-cluster'
+      EngineVersion: '4.0.0'
+      VpcSecurityGroupIds: 
+        - !Ref DocumentDBSecurityGroup
+      DBSubnetGroupName: !Ref DocumentDBSubnetGroup
+
+  DocumentDBInstance:
+    Type: AWS::DocDB::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref DocumentDBCluster
+      DBInstanceClass: db.r5.large
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-docdb-instance'
+
+  DocumentDBSubnetGroup:
+    Type: AWS::DocDB::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for DocumentDB
+      SubnetIds: 
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  DocumentDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for DocumentDB
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 27017
+          ToPort: 27017
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda functions
+      VpcId: !Ref VpcId
+
+Outputs:
+  FleetTableName:
+    Description: 'DynamoDB Fleet Table Name'
+    Value: !Ref FleetTable
+    Export:
+      Name: !Sub '${EnvironmentName}-FleetTableName'
+
+  FleetTableArn:
+    Description: 'DynamoDB Fleet Table ARN'
+    Value: !GetAtt FleetTable.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-FleetTableArn'
+
+  TripTableName:
+    Description: 'DynamoDB Trip Table Name'
+    Value: !Ref TripTable
+    Export:
+      Name: !Sub '${EnvironmentName}-TripTableName'
+
+  TripTableArn:
+    Description: 'DynamoDB Trip Table ARN'
+    Value: !GetAtt TripTable.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-TripTableArn'
+
+  DocumentDBEndpoint:
+    Description: 'DocumentDB Cluster Endpoint'
+    Value: !GetAtt DocumentDBCluster.Endpoint
+    Export:
+      Name: !Sub '${EnvironmentName}-DocumentDBEndpoint'
+
+  DocumentDBPort:
+    Description: 'DocumentDB Port'
+    Value: !GetAtt DocumentDBCluster.Port
+    Export:
+      Name: !Sub '${EnvironmentName}-DocumentDBPort'
+
+  LambdaSecurityGroupId:
+    Description: 'Security Group ID for Lambda functions'
+    Value: !Ref LambdaSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-LambdaSecurityGroupId'
