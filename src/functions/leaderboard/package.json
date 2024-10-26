@@ -1,7 +1,6 @@
 {
-  "name": "search-scooters",
+  "name": "user-profiles",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,7 +9,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "aws-sdk": "^2.1691.0",
+    "dynamodb": "^1.3.0",
+    "mongodb": "^6.10.0",
     "redis": "^4.7.0"
-  }
+  },
+  "devDependencies": {},
+  "description": ""
 }
