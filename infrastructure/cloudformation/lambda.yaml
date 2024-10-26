@@ -161,7 +161,7 @@ Resources:
               .slice(0, 10) // Top 10 users
               .map(([userId, score]) => ({ userId, score }));
           }
-      Runtime: nodejs14.x
+      Runtime: nodejs20.x
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
@@ -220,7 +220,7 @@ Resources:
               redisClient.quit();
             }
           };
-      Runtime: nodejs14.x
+      Runtime: nodejs20.x
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
@@ -260,7 +260,7 @@ Resources:
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub '${EnvironmentName}/trip-operations.zip'
-      Runtime: nodejs14.x
+      Runtime: nodejs20.x
       Environment:
         Variables:
           FLEET_TABLE: !Ref FleetTableName
@@ -284,7 +284,7 @@ Resources:
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub '${EnvironmentName}/user-profiles.zip'
-      Runtime: nodejs14.x
+      Runtime: nodejs20.x
       Environment:
         Variables:
           MONGODB_URI: !Ref DocumentDBConnectionString
