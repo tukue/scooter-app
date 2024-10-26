@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project implements a leaderboard and caching system for a scooter-sharing application using AWS services. It leverages DynamoDB, ElastiCache Redis, and Lambda functions to provide efficient data storage, caching, and real-time leaderboard functionality.
+This project implements a leaderboard and caching system for a scooter-booking application using AWS services. It leverages DynamoDB, ElastiCache Redis, and Lambda functions to provide efficient data storage, caching, and real-time leaderboard functionality.
 
 ## Key Components
 
