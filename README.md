@@ -1,4 +1,4 @@
-# Scooter App: Leaderboard & Caching System
+# Scooter App: 
 
 ## Overview
 
