@@ -39,5 +39,16 @@ This project implements a leaderboard and caching system for a scooter-booking a
 5. Link Cache Update Lambda to streams
 
 
+# creating application architecture diagram using draw.io 
+
+ to install : 
+ npm install -g cfn-diagram
+
+To create the architecture diagram of a main.yaml from cloudformation yaml file.
+npx cfn-diagram draw.io main.yaml
+
+
+
+
 
 
