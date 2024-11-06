@@ -63,4 +63,4 @@ Outputs:
   ApiUrl:
     Description: 'API Gateway URL'
     Value: !GetAtt ApiStack.Outputs.ApiUrl
-EOF
+
