@@ -17,7 +17,7 @@ This project implements a leaderboard and caching system for a scooter-booking a
 
 ### Leaderboard Function Endpoints
 - `POST /leaderboard/update`: Update user score
-- `GET /leaderboard/top-riders`: Get top N riders
+- `GET /leaderboard/top-riders`: Get list of riders
 - `GET /leaderboard/rank`: Get user rank and score
 
 ### Cache Update Function
