@@ -1,19 +1,22 @@
 {
   "name": "scooter-app",
   "version": "1.0.0",
-  "description": "This project implements a leaderboard and caching system for a scooter-booking application using AWS services. It leverages DynamoDB, ElastiCache Redis, and Lambda functions to provide efficient data storage, caching, and real-time leaderboard functionality.",
+  "description": "This project implements a leaderboard and caching system for a scooter-booking application using AWS services.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon index.js",
+    "test": "jest"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "aws-sdk": "^2.1691.0",
-    "express": "^4.17.1",
-    "body-parser": "^1.19.0",
-    "dotenv": "^10.0.0"
+    "aws-sdk": "^2.1.1",
+    "express": "^4.18.2",
+    "redis": "^4.6.10",
+    "uuid": "^9.0.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1"
   }
 }
