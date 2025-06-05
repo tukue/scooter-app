@@ -3,6 +3,8 @@
 ## Overview
 
 This project implements a leaderboard and caching system for a scooter-or bicycle booking application using AWS services. It leverages DynamoDB, ElastiCache Redis, and Lambda functions to provide efficient data storage, caching, and real-time leaderboard functionality.
+Cloud infrastructure and backend lambdas implemented 
+Next implementations: CI/CD, Frontend, Integration, payment, authentication, monitoring 
 
 ## Key Components
 
