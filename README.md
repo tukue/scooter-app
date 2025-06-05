@@ -38,17 +38,95 @@ This project implements a leaderboard and caching system for a scooter-or bicycl
 4. Set up DynamoDB Streams
 5. Link Cache Update Lambda to streams
 
+## Architecture
 
-# creating application architecture diagram using draw.io 
+The Scooter App infrastructure is built on AWS using a serverless architecture pattern with the following key components:
 
- to install : 
- npm install -g cfn-diagram
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                        Scooter App Architecture                                  │
+└─────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                │
+                                                ▼
+                ┌───────────────────────────────────────────────────────────┐
+                │                      Amazon Cognito                       │
+                │  ┌─────────────────┐  ┌─────────────────┐  ┌───────────┐  │
+                │  │   User Pool     │  │  Web Client     │  │  Mobile   │  │
+                │  └─────────────────┘  └─────────────────┘  │  Client   │  │
+                └───────────────────────────────────────────────────────────┘
+                                                │
+                                                ▼
+                ┌───────────────────────────────────────────────────────────┐
+                │                    API Gateway                            │
+                │  ┌─────────────┐  ┌─────────┐  ┌─────────┐  ┌──────────┐  │
+                │  │ User Profile│  │ Search  │  │ Start   │  │ End Trip │  │
+                │  └─────────────┘  └─────────┘  │ Trip    │  └──────────┘  │
+                │                                └─────────┘                │
+                │  ┌─────────────┐                                          │
+                │  │ Leaderboard │                                          │
+                │  └─────────────┘                                          │
+                └───────────────────────────────────────────────────────────┘
+                                                │
+                                                ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                      Lambda Functions                                          │
+│                                                                                               │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐  │
+│  │ GetUserProfile  │  │ SearchScooters  │  │ StartTrip       │  │ EndTrip                 │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────────────┘  │
+│                                                                                               │
+│  ┌─────────────────┐  ┌─────────────────┐                                                     │
+│  │ GetLeaderboard  │  │ UpdateLeaderboard│                                                    │
+│  └─────────────────┘  └─────────────────┘                                                     │
+└───────────────────────────────────────────────────────────────────────────────────────────────┘
+          │                    │                     │                      │
+          ▼                    ▼                     ▼                      ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
+│                 │  │                 │  │                     │  │                     │
+│  Amazon         │  │  Amazon         │  │  Amazon DynamoDB    │  │  Amazon DocumentDB  │
+│  ElastiCache    │  │  EventBridge    │  │                     │  │                     │
+│  (Redis)        │  │  (Scheduler)    │  │  ┌─────────────┐    │  │  ┌─────────────┐    │
+│                 │  │                 │  │  │ Fleet Table │    │  │  │ User        │    │
+│                 │  │                 │  │  └─────────────┘    │  │  │ Profiles    │    │
+│                 │  │                 │  │  ┌─────────────┐    │  │  └─────────────┘    │
+│                 │  │                 │  │  │ Trip Table  │    │  │                     │
+│                 │  │                 │  │  └─────────────┘    │  │                     │
+└─────────────────┘  └─────────────────┘  └─────────────────────┘  └─────────────────────┘
+```
 
-To create the architecture diagram of a main.yaml from cloudformation yaml file.
+### Service Integration
+
+- **Network Layer**: VPC with private/public subnets across multiple AZs
+- **Authentication**: Amazon Cognito for web and mobile clients
+- **API Layer**: API Gateway with Cognito authorizers
+- **Compute Layer**: Lambda functions for all business logic
+- **Data Storage**: 
+  - DynamoDB for Fleet and Trip data
+  - DocumentDB for User Profiles
+  - ElastiCache (Redis) for caching and leaderboards
+- **Event Processing**: EventBridge for scheduled leaderboard updates
+
+### CloudFormation Stack Structure
+
+The infrastructure is deployed using nested CloudFormation stacks:
+
+1. **Main Stack**: Orchestrates all nested stacks
+2. **Network Stack**: VPC, subnets, security groups
+3. **Database Stack**: DynamoDB tables and DocumentDB cluster
+4. **Cache Stack**: ElastiCache Redis cluster
+5. **Lambda Stack**: Lambda functions and execution roles
+6. **API Stack**: API Gateway and Cognito resources
+
+## Creating Architecture Diagrams
+
+To create architecture diagrams from CloudFormation templates:
+
+```bash
+# Install cfn-diagram
+npm install -g cfn-diagram
+
+# Generate diagram from main template
 npx cfn-diagram draw.io main.yaml
-
-
-
-
+```
 
 
